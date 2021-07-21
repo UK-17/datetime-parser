@@ -3,6 +3,8 @@ import sys
 import os
 import requests
 import json
+import collections
+from itertools import islice
 import re
 import datetime
 from pathlib import Path
@@ -21,11 +23,11 @@ year_list = data.year_list
 num_2_word = data.number_to_word
 
 
-def _checkifmonthpresent(dob):
+def _checkifmonthpresent(utterance):
 
 
-    if dob!='':
-        result = re.findall("january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec",dob.lower())
+    if utterance!='':
+        result = re.findall("january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec",utterance.lower())
 
     result_=None
     if result !=[]:
@@ -40,32 +42,32 @@ def _checkifmonthpresent(dob):
     else:
         retVal= True
         logger.info("Extracted month from text is :{} and replacement string is :{}".format(result_,result))
-        dob = dob.lower().replace(result[0],"")
-        logger.info("DOB is  now :{}".format(dob))
+        utterance = utterance.lower().replace(result[0],"")
+        logger.info("utterance is  now :{}".format(utterance))
 
-    return retVal,result_,dob
+    return retVal,result_,utterance
 
-def _getvalidyear(dob):
+def _getvalidyear(utterance):
     ret_year=[]
     retVal=-1
     is_valid_year= False
-    if dob!='':
-        result = re.findall('(?P<year>[0-9]{4})',dob)
+    if utterance!='':
+        result = re.findall('(?P<year>[0-9]{4})',utterance)
 
     if result !=[]:  
         for yr in result:
             is_valid_year=validateyear(yr)
             if is_valid_year:
-                dob = dob.replace(yr,"")
+                utterance = utterance.replace(yr,"")
                 retVal= yr
-                return is_valid_year,retVal,dob
+                return is_valid_year,retVal,utterance
     
 
-    return is_valid_year,retVal,dob
+    return is_valid_year,retVal,utterance
 
-def _getdaywithsuffix(dob):
-    if dob!='':
-        result = re.findall('[0-9]{1,2}(?=th|rd|st|nd)',dob)
+def _getdaywithsuffix(utterance):
+    if utterance!='':
+        result = re.findall('[0-9]{1,2}(?=th|rd|st|nd)',utterance)
     
 
     if result ==[]:
@@ -74,22 +76,22 @@ def _getdaywithsuffix(dob):
         retVal = True
         is_day = validateday(result[0])
         if is_day:
-            dob = dob.replace(result[0],"",1)
+            utterance = utterance.replace(result[0],"",1)
         else:
             if len(result)==2:
                 is_day = validateday(result[1])
                 if is_day:
-                    dob = dob.replace(result[1],"",1)
+                    utterance = utterance.replace(result[1],"",1)
                 
             
         
     logger.info("Date with suffix:{}".format(result))
-    return retVal,result,dob
+    return retVal,result,utterance
 
-def getdaywithspaceassuffix(dob):
+def getdaywithspaceassuffix(utterance):
     ret_day=''
-    if dob!='':
-        result = re.findall('^[0-9]{1,2}[0-9\w+](?=\s)',dob)
+    if utterance!='':
+        result = re.findall('^[0-9]{1,2}[0-9\w+](?=\s)',utterance)
         logger.info("Length of date result:{}".format(len(result)))
 
         if result ==[]:
@@ -127,9 +129,9 @@ def _getnumeralsfromtext(eachline):
     return(result)
 
 def _getnumeralsaspattern(eachline,is_day,is_month,is_year):
-    day_dob = -1 
-    month_dob = -1 
-    year_dob =-1
+    day_utterance = -1 
+    month_utterance = -1 
+    year_utterance =-1
 
 
     if eachline!='':
@@ -142,64 +144,64 @@ def _getnumeralsaspattern(eachline,is_day,is_month,is_year):
         res_len= len(result)
         if is_month:#month is already calculated
             if res_len==2:
-                day_dob = _returnValue(result,0,1)
-                is_day = validateday(day_dob)
+                day_utterance = _returnValue(result,0,1)
+                is_day = validateday(day_utterance)
                 if is_day:
-                    year_dob= _returnValue(result,1,2)
-                    if len(year_dob)==4:
-                        is_year = validateyear(year_dob)
+                    year_utterance= _returnValue(result,1,2)
+                    if len(year_utterance)==4:
+                        is_year = validateyear(year_utterance)
                         if not is_year:
-                            year_dob =-1
-                    elif len(year_dob)==2:
-                        year_dob,is_year = _getproperformat(year_dob,'year')
-                        is_year = validateyear(year_dob)
+                            year_utterance =-1
+                    elif len(year_utterance)==2:
+                        year_utterance,is_year = _getproperformat(year_utterance,'year')
+                        is_year = validateyear(year_utterance)
                         if not is_year:
-                            year_dob =-1
+                            year_utterance =-1
 
-            logger.info("Output from _getnumeralaspattern day:{},month:{},year:{}".format(day_dob,month_dob,year_dob))  
-            return(is_day,is_month,is_year,day_dob,year_dob)
+            logger.info("Output from _getnumeralaspattern day:{},month:{},year:{}".format(day_utterance,month_utterance,year_utterance))  
+            return(is_day,is_month,is_year,day_utterance,year_utterance)
         else:
             if res_len==3:
-                day_dob = _returnValue(result,0,1)
-                is_day = validateday(day_dob)
+                day_utterance = _returnValue(result,0,1)
+                is_day = validateday(day_utterance)
                 if is_day:
-                    month_dob = _returnValue(result,1,2)
-                    is_month = validatemonth(month_dob)
+                    month_utterance = _returnValue(result,1,2)
+                    is_month = validatemonth(month_utterance)
                     if is_month:
-                        year_dob = _returnValue(result,2,3)
-                        if len(year_dob)==4:
-                            is_year = validateyear(year_dob)
+                        year_utterance = _returnValue(result,2,3)
+                        if len(year_utterance)==4:
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob =-1
+                                year_utterance =-1
                                 is_month=False
-                                month_dob =-1
+                                month_utterance =-1
                                 is_day = False
-                                day_dob=-1
-                        elif len(year_dob)==2:
-                            logger.info("year dob after extraction:{}".format(year_dob))
-                            year_dob,is_year = _getproperformat(year_dob,'year')
-                            logger.info("year dob after extraction:{}".format(year_dob))
-                            is_year = validateyear(year_dob)
+                                day_utterance=-1
+                        elif len(year_utterance)==2:
+                            logger.info("year utterance after extraction:{}".format(year_utterance))
+                            year_utterance,is_year = _getproperformat(year_utterance,'year')
+                            logger.info("year utterance after extraction:{}".format(year_utterance))
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob =-1
+                                year_utterance =-1
                                 is_month=False
-                                month_dob =-1
+                                month_utterance =-1
                                 is_day = False
-                                day_dob=-1
+                                day_utterance=-1
                         else:
-                            year_dob=-1
+                            year_utterance=-1
                             is_year = False
                             is_day = False
                             is_month = False
-                            day_dob=-1
-                            month_dob=-1
+                            day_utterance=-1
+                            month_utterance=-1
 
                     else:
                         is_day = False
-                        day_dob = -1
+                        day_utterance = -1
                             
-            logger.info("Output from _getnumeralaspattern day:{},month:{},year:{}".format(day_dob,month_dob,year_dob))  
-            return(is_day,is_month,is_year,day_dob,month_dob,year_dob)
+            logger.info("Output from _getnumeralaspattern day:{},month:{},year:{}".format(day_utterance,month_utterance,year_utterance))  
+            return(is_day,is_month,is_year,day_utterance,month_utterance,year_utterance)
 
 def _returnValue(date_list,start_indx,end_indx):
     retVal=''
@@ -299,9 +301,9 @@ def _getvaliddate(year_,month_,day_):
     day_,is_day_valid = _getproperformat(day_,'day')
     logger.info("Returned Values: Year{},Month:{},Day:{}".format(year_,month_,day_))
 
-    dob = str(year_)+'-'+str(month_)+'-'+str(day_)
+    utterance = str(year_)+'-'+str(month_)+'-'+str(day_)
     
-    return dob,is_year_valid,is_month_valid,is_day_valid
+    return utterance,is_year_valid,is_month_valid,is_day_valid
 
 def consume(iterator, n):
     "Advance the iterator n-steps ahead. If n is none, consume entirely."
@@ -394,7 +396,7 @@ def word2number(text):
 
 
 
-def converttovalidDOB(utterance):
+def converttovalidutterance(utterance):
     count_year=0
     count_month=0
     count_day_withsuffix=0
@@ -414,13 +416,13 @@ def converttovalidDOB(utterance):
     #for i in index:
     #logger.info("I am here ")
     # this will extract everything before a \t or \n
-    dobstr= re.findall("[0-9\s\w\S]+",utterance)
+    utterancestr= re.findall("[0-9\s\w\S]+",utterance)
     # used new variable to update as i keep on finding day,month and year
-    date_of_birth = dobstr[0]
-    logger.info(dobstr)
+    date_utterance = utterancestr[0]
+    logger.info(utterancestr)
 
    
-    logger.info("Target String is :{}".format(dobstr))
+    logger.info("Target String is :{}".format(utterancestr))
     """
     Logic is as follows
     easiest is find 2 things
@@ -442,32 +444,32 @@ def converttovalidDOB(utterance):
     4. if word month found-- min is 3 and max is 6 but in pairs of 1,2 or 2,2 or 1,4 or 2,4
     """
 
-    if dobstr==[]:
-        is_month,month_dob = False,'01'
-        is_year,year_dob =  False,'1900'
-        is_date,day_dob = False,'01'
-        rowdata = [dobstr,year_dob,month_dob,day_dob]
+    if utterancestr==[]:
+        is_month,month_utterance = False,'01'
+        is_year,year_utterance =  False,'1900'
+        is_date,day_utterance = False,'01'
+        rowdata = [utterancestr,year_utterance,month_utterance,day_utterance]
         row_list.append(rowdata)
     
     else:    
-        logger.info("DOBSTR:{}".format(dobstr[0]))
+        logger.info("utteranceSTR:{}".format(utterancestr[0]))
         #go and convert all words in numbers if possible
-        date_of_birth = number2word(date_of_birth)
-        date_of_birth = word2number(date_of_birth)
-        logger.info("After word 2 number:{}".format(date_of_birth))
+        date_utterance = number2word(date_utterance)
+        date_utterance = word2number(date_utterance)
+        logger.info("After word 2 number:{}".format(date_utterance))
         
         
-        is_month,month_dob,date_of_birth = _checkifmonthpresent(date_of_birth)
+        is_month,month_utterance,date_utterance = _checkifmonthpresent(date_utterance)
         # if is_month:
         #     is_month = False #setting to false so that date can be extracted
 
-        logger.info("Month Extracted:{}".format(month_dob))  
+        logger.info("Month Extracted:{}".format(month_utterance))  
 
         if is_month:      
         
-            is_day,is_month,is_year,day_dob,year_dob = _getnumeralsaspattern(date_of_birth,is_day,is_month,is_year)
+            is_day,is_month,is_year,day_utterance,year_utterance = _getnumeralsaspattern(date_utterance,is_day,is_month,is_year)
         else:
-            is_day,is_month,is_year,day_dob,month_dob,year_dob = _getnumeralsaspattern(date_of_birth,is_day,is_month,is_year)
+            is_day,is_month,is_year,day_utterance,month_utterance,year_utterance = _getnumeralsaspattern(date_utterance,is_day,is_month,is_year)
         
 
 
@@ -479,48 +481,48 @@ def converttovalidDOB(utterance):
         
         # find day as 1st,2nd,3rd,4th. assuming that only day or month have such suffixes
         """
-        is_day,day_dob,date_of_birth = _getdaywithsuffix(date_of_birth) #day_dob is a list
+        is_day,day_utterance,date_utterance = _getdaywithsuffix(date_utterance) #day_utterance is a list
         # if format is 9th of 6th of 1988 then day will be extracted as a list with 2 elements
-        if len(day_dob)==1:
-            day_dob = day_dob[0]
-            is_day = validateday(day_dob)
-            logger.info("AFTER EXTRACTING th of is_day is :{} and day_dob :{}".format(is_day,day_dob))
+        if len(day_utterance)==1:
+            day_utterance = day_utterance[0]
+            is_day = validateday(day_utterance)
+            logger.info("AFTER EXTRACTING th of is_day is :{} and day_utterance :{}".format(is_day,day_utterance))
            
         
-        logger.info("Day Extracted with suffix:{}".format(day_dob))
+        logger.info("Day Extracted with suffix:{}".format(day_utterance))
         
         # get year in 4 year format
         
         
         if not is_month: #if month is not as word then it will look in numbers
             # means month is in number format
-            if len(day_dob)>1 and is_day: #assuming dd-mm format
-                day_ = day_dob
-                day_dob= day_[0] #1st record is day. 
-                month_dob = day_[1] #2nd record is month
-                is_day = validateday(day_dob) # keep on checking if day extracted is valid
-                is_month = validatemonth(month_dob) #keep on checking if month extracted is valid
+            if len(day_utterance)>1 and is_day: #assuming dd-mm format
+                day_ = day_utterance
+                day_utterance= day_[0] #1st record is day. 
+                month_utterance = day_[1] #2nd record is month
+                is_day = validateday(day_utterance) # keep on checking if day extracted is valid
+                is_month = validatemonth(month_utterance) #keep on checking if month extracted is valid
                 # better to check if month is invalid. If a day is invalid it is an invalid month also
                 if not is_month: #continuation of above
-                    day_dob= day_[1]
-                    month_dob = day_[0]
-                    is_day = validateday(day_dob)
-                    is_month = validatemonth(month_dob)
+                    day_utterance= day_[1]
+                    month_utterance = day_[0]
+                    is_day = validateday(day_utterance)
+                    is_month = validatemonth(month_utterance)
                     if not is_day or not is_month: # a bit strict test. 
-                        day_dob =-1
-                        month_dob = -1
-            elif len(day_dob)==1 and is_day: # if only one entry as rd,st,th etc
-                day_=day_dob
-                day_dob = day_[0]
+                        day_utterance =-1
+                        month_utterance = -1
+            elif len(day_utterance)==1 and is_day: # if only one entry as rd,st,th etc
+                day_=day_utterance
+                day_utterance = day_[0]
         
         """
                             
-        #is_year,year_dob,date_of_birth = _getvalidyear(date_of_birth)# this will extract year if it is in 4 digit format
-        #logger.info("if year exists in 4 digit format::{} Extracted:{}".format(is_year,year_dob))
+        #is_year,year_utterance,date_utterance = _getvalidyear(date_utterance)# this will extract year if it is in 4 digit format
+        #logger.info("if year exists in 4 digit format::{} Extracted:{}".format(is_year,year_utterance))
         # code will automatically flow here
-        # now what ever is extracted will be removed from date_of_birth
+        # now what ever is extracted will be removed from date_utterance
         
-        date_numerals = _getnumeralsfromtext(date_of_birth) # this returns all nos from uttered text
+        date_numerals = _getnumeralsfromtext(date_utterance) # this returns all nos from uttered text
 
         # year is not in 4 digit format or day is a pure number and not psucced by nd,rs,st
         if not is_year and not is_day: # could not find year as 4 digits and no nd,st,rd,th exist
@@ -532,28 +534,28 @@ def converttovalidDOB(utterance):
                 # expected formats mm-yy or m-yy or yy-m or yy-mm
                 # not supported 76 may 2
                 if len(date_numerals)==3:
-                    day_dob = _returnValue(date_numerals,0,1)
-                    is_day = validateday(day_dob)#only an invalid date if it is 0
+                    day_utterance = _returnValue(date_numerals,0,1)
+                    is_day = validateday(day_utterance)#only an invalid date if it is 0
                     if is_day:
-                        year_dob = _returnValue(date_numerals,1,3)
+                        year_utterance = _returnValue(date_numerals,1,3)
                     else:
                         logger.info("No valid day and year found")
-                        day_dob = -1
-                        year_dob = -1
+                        day_utterance = -1
+                        year_utterance = -1
                 elif len(date_numerals)==4: #dd-yy or yy-dd
-                    day_dob = _returnValue(date_numerals,0,2)
-                    is_day = validateday(month_dob)
+                    day_utterance = _returnValue(date_numerals,0,2)
+                    is_day = validateday(month_utterance)
                     if is_day:
-                        year_dob = _returnValue(date_numerals,2,4)
+                        year_utterance = _returnValue(date_numerals,2,4)
                     else:
-                        day_dob = _returnValue(date_numerals,2,4)
-                        year_dob = _returnValue(date_numerals,0,2)
-                        is_day = validateday(day_dob)
+                        day_utterance = _returnValue(date_numerals,2,4)
+                        year_utterance = _returnValue(date_numerals,0,2)
+                        is_day = validateday(day_utterance)
                         if not is_day:
                             logger.info("Invalid date ")
                 else:
-                    day_dob =-1
-                    year_dob =-1
+                    day_utterance =-1
+                    year_utterance =-1
             else:#month is not in words all date in numbers
                 
                 #means year, month and day are all in max 2 digit number format and 
@@ -563,204 +565,204 @@ def converttovalidDOB(utterance):
                 logger.info("Now all date in numerals length of numerals :{}".format(len(date_numerals)))
                 if len(date_numerals)>8:#if a number starts with 0 then is it handled
                     logger.info("Invalid Date")
-                    day_dob =-1
-                    month_dob=-1
-                    year_dob =-1
+                    day_utterance =-1
+                    month_utterance=-1
+                    year_utterance =-1
                 elif len(date_numerals)==8:#dd-mm-yyyy or mm-dd-yyyy -rest not handled
-                    day_dob = _returnValue(date_numerals,0,2)
-                    is_day = validateday(day_dob)
+                    day_utterance = _returnValue(date_numerals,0,2)
+                    is_day = validateday(day_utterance)
                     if is_day:
-                        month_dob = _returnValue(date_numerals,2,4)
-                        is_month =validatemonth(month_dob)
+                        month_utterance = _returnValue(date_numerals,2,4)
+                        is_month =validatemonth(month_utterance)
                         logger.info("Month extratced in 8 digits:{}".format(is_month))
                         if is_month:
-                            year_dob= _returnValue(date_numerals,4,8)
-                            logger.info("eight digits Day:{} month:{} and Year:{}".format(day_dob,month_dob,year_dob))
-                            is_year = validateyear(year_dob)
+                            year_utterance= _returnValue(date_numerals,4,8)
+                            logger.info("eight digits Day:{} month:{} and Year:{}".format(day_utterance,month_utterance,year_utterance))
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob = -1
+                                year_utterance = -1
                         
                         else:
-                            day_dob = _returnValue(date_numerals,2,4)
-                            is_day = validateday(day_dob)
+                            day_utterance = _returnValue(date_numerals,2,4)
+                            is_day = validateday(day_utterance)
                             if is_day:
-                                month_dob = _returnValue(date_numerals,0,2)
-                                is_month =validatemonth(month_dob)
+                                month_utterance = _returnValue(date_numerals,0,2)
+                                is_month =validatemonth(month_utterance)
                                 if is_month:
-                                    year_dob = _returnValue(date_numerals,4,8)
-                                    is_year = validateyear(year_dob)
-                                    logger.info("Day:{} month:{} and Year:{}".format(day_dob,month_dob,year_dob))
+                                    year_utterance = _returnValue(date_numerals,4,8)
+                                    is_year = validateyear(year_utterance)
+                                    logger.info("Day:{} month:{} and Year:{}".format(day_utterance,month_utterance,year_utterance))
                                     if not is_year:
-                                        year_dob = -1
+                                        year_utterance = -1
                                 else:
                                     logger.info("Date Not handled")
-                                    day_dob =-1
-                                    month_dob =-1
-                                    year_dob =-1
+                                    day_utterance =-1
+                                    month_utterance =-1
+                                    year_utterance =-1
                     else:
-                        day_dob = _returnValue(date_numerals,2,4)
-                        is_day = validateday(day_dob)
+                        day_utterance = _returnValue(date_numerals,2,4)
+                        is_day = validateday(day_utterance)
                         if is_day:
-                            month_dob = _returnValue(date_numerals,0,2)
-                            is_month =validatemonth(month_dob)
+                            month_utterance = _returnValue(date_numerals,0,2)
+                            is_month =validatemonth(month_utterance)
                             if is_month:
-                                year_dob= _returnValue(date_numerals,4,8)
-                                is_year = validateyear(year_dob)
+                                year_utterance= _returnValue(date_numerals,4,8)
+                                is_year = validateyear(year_utterance)
                                 if not is_year:
-                                    year_dob = -1
+                                    year_utterance = -1
                         
                 elif len(date_numerals)==7:#dd-m-yyyy,d-mm-yyyy -rest not handled
                     logger.info("Seven Digit format:{}".format(date_numerals))
-                    day_dob = _returnValue(date_numerals,0,2)
-                    is_day = validateday(day_dob)
+                    day_utterance = _returnValue(date_numerals,0,2)
+                    is_day = validateday(day_utterance)
                     if is_day:#else case means first 2 digit is more than 31 or 0
-                        month_dob = _returnValue(date_numerals,2,3)
-                        is_month =validatemonth(month_dob)
-                        logger.info("Month extracted:{}".format(month_dob))
+                        month_utterance = _returnValue(date_numerals,2,3)
+                        is_month =validatemonth(month_utterance)
+                        logger.info("Month extracted:{}".format(month_utterance))
                         if is_month:#if month is valid
-                            year_dob= _returnValue(date_numerals,3,7)
-                            is_year = validateyear(year_dob)
+                            year_utterance= _returnValue(date_numerals,3,7)
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob = -1
+                                year_utterance = -1
                         
                         else:#case like 1101980
-                            day_dob = _returnValue(date_numerals,0,1)
-                            logger.info("Day extracted seven digit format:{}".format(day_dob))
-                            is_day = validateday(day_dob)
+                            day_utterance = _returnValue(date_numerals,0,1)
+                            logger.info("Day extracted seven digit format:{}".format(day_utterance))
+                            is_day = validateday(day_utterance)
                             if is_day:
-                                month_dob = _returnValue(date_numerals,1,3)
-                                is_month =validatemonth(month_dob)
+                                month_utterance = _returnValue(date_numerals,1,3)
+                                is_month =validatemonth(month_utterance)
                                 if is_month:
-                                    year_dob = _returnValue(date_numerals,3,7)
-                                    is_year = validateyear(year_dob)
+                                    year_utterance = _returnValue(date_numerals,3,7)
+                                    is_year = validateyear(year_utterance)
                                     if not is_year:
-                                        year_dob = -1
+                                        year_utterance = -1
                                 else:
-                                    day_dob = _returnValue(date_numerals,1,3)
-                                    is_day = validatemonth(day_dob)
+                                    day_utterance = _returnValue(date_numerals,1,3)
+                                    is_day = validatemonth(day_utterance)
                                     if is_day:
-                                        month_dob = _returnValue(date_numerals,2,3)
-                                        is_month =validatemonth(month_dob)
+                                        month_utterance = _returnValue(date_numerals,2,3)
+                                        is_month =validatemonth(month_utterance)
                                         if is_month:
-                                            year_dob = _returnValue(date_numerals,3,7)
-                                            is_year = validateyear(year_dob)
+                                            year_utterance = _returnValue(date_numerals,3,7)
+                                            is_year = validateyear(year_utterance)
                                             if not is_year:
-                                                year_dob = -1
+                                                year_utterance = -1
                                     else:
                                         logger.info("Date Not handled")
-                                        day_dob =-1
-                                        month_dob =-1
-                                        year_dob =-1
+                                        day_utterance =-1
+                                        month_utterance =-1
+                                        year_utterance =-1
                     else:
-                        day_dob = _returnValue(date_numerals,0,1)
-                        is_day = validateday(day_dob)
+                        day_utterance = _returnValue(date_numerals,0,1)
+                        is_day = validateday(day_utterance)
                         if is_day:
-                            month_dob = _returnValue(date_numerals,1,3)
-                            is_month =validatemonth(month_dob)
+                            month_utterance = _returnValue(date_numerals,1,3)
+                            is_month =validatemonth(month_utterance)
                             if is_month:
-                                year_dob= _returnValue(date_numerals,3,7)
-                                is_year = validateyear(year_dob)
+                                year_utterance= _returnValue(date_numerals,3,7)
+                                is_year = validateyear(year_utterance)
                                 if not is_year:
-                                    year_dob = -1
+                                    year_utterance = -1
                             else:
-                                month_dob=-1
+                                month_utterance=-1
 
                 
                 elif len(date_numerals)==6:#dd-mm-yy or mm-dd-yy -rest not handled
                     logger.info('This date is all number and 6 digits')
-                    day_dob = _returnValue(date_numerals,0,2)
-                    is_day = validateday(day_dob)
+                    day_utterance = _returnValue(date_numerals,0,2)
+                    is_day = validateday(day_utterance)
                     if is_day:
-                        month_dob = _returnValue(date_numerals,2,4)
-                        is_month =validatemonth(month_dob)
+                        month_utterance = _returnValue(date_numerals,2,4)
+                        is_month =validatemonth(month_utterance)
                         
                         if is_month:
-                            year_dob= _returnValue(date_numerals,4,6)
-                            is_year = validateyear(year_dob)
+                            year_utterance= _returnValue(date_numerals,4,6)
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob = -1
+                                year_utterance = -1
                         
                         else:
                             logger.info('Month is not in correct format')
-                            day_dob = _returnValue(date_numerals,2,4)
-                            is_day = validateday(day_dob)
+                            day_utterance = _returnValue(date_numerals,2,4)
+                            is_day = validateday(day_utterance)
                             if is_day:
-                                month_dob = _returnValue(date_numerals,0,2)
-                                is_month =validatemonth(month_dob)
+                                month_utterance = _returnValue(date_numerals,0,2)
+                                is_month =validatemonth(month_utterance)
                                 if is_month:
-                                    year_dob = _returnValue(date_numerals,4,6)
-                                    is_year = validateyear(year_dob)
+                                    year_utterance = _returnValue(date_numerals,4,6)
+                                    is_year = validateyear(year_utterance)
                                     if not is_year:
-                                        year_dob = -1
+                                        year_utterance = -1
                                 else:
                                     logger.info("Date Not handled")
-                                    day_dob =-1
-                                    month_dob =-1
-                                    year_dob =-1
+                                    day_utterance =-1
+                                    month_utterance =-1
+                                    year_utterance =-1
                 elif len(date_numerals)==5:#dd-m-yy or m-dd-yy or dd-mm-y  -rest not handled
                     logger.info("XXXXDate_NumeralsXXXX: {}".format(date_numerals))
-                    day_dob = _returnValue(date_numerals,0,2)
-                    is_day = validateday(day_dob)
+                    day_utterance = _returnValue(date_numerals,0,2)
+                    is_day = validateday(day_utterance)
                     if is_day:
-                        month_dob = _returnValue(date_numerals,2,3)
-                        is_month =validatemonth(month_dob)
+                        month_utterance = _returnValue(date_numerals,2,3)
+                        is_month =validatemonth(month_utterance)
                         if is_month:
-                            year_dob= _returnValue(date_numerals,3,5)
-                            is_year = validateyear(year_dob)
+                            year_utterance= _returnValue(date_numerals,3,5)
+                            is_year = validateyear(year_utterance)
                             if not is_year:
-                                year_dob = -1
+                                year_utterance = -1
                         else:
-                            month_dob = _returnValue(date_numerals,2,4)
-                            is_month =validatemonth(month_dob)
+                            month_utterance = _returnValue(date_numerals,2,4)
+                            is_month =validatemonth(month_utterance)
                             if is_month:#risky assumption but then so be it
-                                year_dob= _returnValue(date_numerals,4,5)
+                                year_utterance= _returnValue(date_numerals,4,5)
                             else:
-                                month_dob =-1
-                                year_dob = -1
+                                month_utterance =-1
+                                year_utterance = -1
                         
                     else:
-                        day_dob = _returnValue(date_numerals,0,1)
-                        is_day = validatemonth(day_dob)
+                        day_utterance = _returnValue(date_numerals,0,1)
+                        is_day = validatemonth(day_utterance)
                         if is_day:
-                            month_dob = _returnValue(date_numerals,1,3)
-                            is_month =validatemonth(month_dob)
+                            month_utterance = _returnValue(date_numerals,1,3)
+                            is_month =validatemonth(month_utterance)
                             if is_month:
-                                year_dob = _returnValue(date_numerals,3,5)
-                                is_year = validateyear(year_dob)
+                                year_utterance = _returnValue(date_numerals,3,5)
+                                is_year = validateyear(year_utterance)
                                 if not is_year:
-                                    year_dob = -1
+                                    year_utterance = -1
                             else:
                                 logger.info("Date Not handled")
-                                day_dob =-1
-                                month_dob =-1
-                                year_dob =-1
+                                day_utterance =-1
+                                month_utterance =-1
+                                year_utterance =-1
                 elif len(date_numerals)==4: #01/01 kind of cases
                 
-                    day_dob = _returnValue(date_numerals,0,1)
-                    if day_dob =='0':
-                        day_dob = _returnValue(date_numerals,0,2)
-                        month_dob = '01'
+                    day_utterance = _returnValue(date_numerals,0,1)
+                    if day_utterance =='0':
+                        day_utterance = _returnValue(date_numerals,0,2)
+                        month_utterance = '01'
                     else:
-                        month_dob = _returnValue(date_numerals,1,2)
-                    year_dob = _returnValue(date_numerals,2,4)
-                    is_month = validatemonth(month_dob)
-                    is_day = validateday(day_dob)
+                        month_utterance = _returnValue(date_numerals,1,2)
+                    year_utterance = _returnValue(date_numerals,2,4)
+                    is_month = validatemonth(month_utterance)
+                    is_day = validateday(day_utterance)
                     if not is_day or not is_month:#this flow should never happen
-                        day_dob = _returnValue(date_numerals,1,2)
-                        month_dob = _returnValue(date_numerals,0,1)
-                        year_dob = _returnValue(date_numerals,2,4)
-                        is_month = validatemonth(month_dob)
-                        is_day = validatemonth(day_dob)
-                        is_year = validateyear(year_dob)
+                        day_utterance = _returnValue(date_numerals,1,2)
+                        month_utterance = _returnValue(date_numerals,0,1)
+                        year_utterance = _returnValue(date_numerals,2,4)
+                        is_month = validatemonth(month_utterance)
+                        is_day = validatemonth(day_utterance)
+                        is_year = validateyear(year_utterance)
                         if not is_year:
-                            logger.info(" Invalid 4 digit format: Year looks badly formed:{}".format(year_dob))
-                            year_dob=1900
+                            logger.info(" Invalid 4 digit format: Year looks badly formed:{}".format(year_utterance))
+                            year_utterance=1900
                         elif not is_month:
-                            logger.info("Badly formed month.".format(month_dob,day_dob))
-                            month_dob = '01'
+                            logger.info("Badly formed month.".format(month_utterance,day_utterance))
+                            month_utterance = '01'
                         else:
-                            logger.info("Badly formed day.".format(month_dob,day_dob))
-                            day_dob = '01'
+                            logger.info("Badly formed day.".format(month_utterance,day_utterance))
+                            day_utterance = '01'
 
                         
         elif not is_month and not is_day: # year is in 4 year format 
@@ -771,74 +773,74 @@ def converttovalidDOB(utterance):
             #maximum is 8
             if len(date_numerals)==0:
                 logger.info(" No day or month")
-                day_dob = -1
-                month_dob = -1
+                day_utterance = -1
+                month_utterance = -1
             elif len(date_numerals)==1:
                 logger.info(" Will extract month as day is not bounded by st,rd or nd")
-                logger.info("Year value is {}".format(year_dob))
-                left_numerals = re.sub(year_dob,'',date_of_birth)
+                logger.info("Year value is {}".format(year_utterance))
+                left_numerals = re.sub(year_utterance,'',date_utterance)
                 left_numerals = re.findall('[0-9]+',left_numerals)
                 logger.info(left_numerals)
-                month_dob = _returnValue(left_numerals,0,1)
-                is_month = validatemonth(month_dob)
+                month_utterance = _returnValue(left_numerals,0,1)
+                is_month = validatemonth(month_utterance)
                 if not is_month:
                     logger.info("Looks invalid month say a 0")
-                    month_dob =-1
+                    month_utterance =-1
 
             elif len(date_numerals)==2:
-                left_numerals = re.sub(year_dob,'',date_of_birth)
+                left_numerals = re.sub(year_utterance,'',date_utterance)
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 logger.info(left_numerals)
-                month_dob = _returnValue(left_numerals,0,1)
-                if month_dob=='0':
+                month_utterance = _returnValue(left_numerals,0,1)
+                if month_utterance=='0':
                     logger.info("Month is not valid and we have just a month or day")
-                    month_dob= _returnValue(left_numerals,0,2)
+                    month_utterance= _returnValue(left_numerals,0,2)
                 else:
-                    day_dob = _returnValue(left_numerals,1,2)
+                    day_utterance = _returnValue(left_numerals,1,2)
 
             elif len(date_numerals)==3:
-                left_numerals = re.sub(year_dob,'',date_of_birth)
+                left_numerals = re.sub(year_utterance,'',date_utterance)
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 logger.info("Date numerals is {} after removing 4 digit year".format(left_numerals))
-                day_dob = _returnValue(left_numerals,0,2)
-                month_dob = _returnValue(left_numerals,2,3)
+                day_utterance = _returnValue(left_numerals,0,2)
+                month_utterance = _returnValue(left_numerals,2,3)
                 
-                is_day = validateday(day_dob)
+                is_day = validateday(day_utterance)
                 if not is_day:
-                    day_dob = _returnValue(left_numerals,0,1)
-                    month_dob = _returnValue(left_numerals,1,3)
-                    is_month = validatemonth(month_dob)
+                    day_utterance = _returnValue(left_numerals,0,1)
+                    month_utterance = _returnValue(left_numerals,1,3)
+                    is_month = validatemonth(month_utterance)
                     if not is_month:
                         logger.info("Invalid Month")
-                        # month_dob = _returnValue(left_numerals,2,3)
-                        # day_dob = _returnValue(left_numerals,0,2)
-                        # is_day = validateday(day_dob)
+                        # month_utterance = _returnValue(left_numerals,2,3)
+                        # day_utterance = _returnValue(left_numerals,0,2)
+                        # is_day = validateday(day_utterance)
             else:
-                left_numerals = re.sub(year_dob,'',date_of_birth)
+                left_numerals = re.sub(year_utterance,'',date_utterance)
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 logger.info(left_numerals)
-                day_dob = _returnValue(left_numerals,0,2)
-                month_dob = _returnValue(left_numerals,2,4)
+                day_utterance = _returnValue(left_numerals,0,2)
+                month_utterance = _returnValue(left_numerals,2,4)
                 
-                is_day = validateday(day_dob)
-                is_month = validatemonth(month_dob)
+                is_day = validateday(day_utterance)
+                is_month = validatemonth(month_utterance)
                 if not is_day or not is_month:
-                    month_dob = _returnValue(left_numerals,0,2)
-                    day_dob = _returnValue(left_numerals,2,4)
-                    is_day = validateday(day_dob)
-                    is_month = validatemonth(month_dob)
+                    month_utterance = _returnValue(left_numerals,0,2)
+                    day_utterance = _returnValue(left_numerals,2,4)
+                    is_day = validateday(day_utterance)
+                    is_month = validatemonth(month_utterance)
         elif not is_day and is_month:
             try:
-                left_numerals = re.sub(year_dob,'',date_of_birth)
+                left_numerals = re.sub(year_utterance,'',date_utterance)
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 logger.info(left_numerals)
                 if len(left_numerals)>1:
-                    day_dob = _returnValue(left_numerals,0,2)
-                    is_day = validateday(day_dob)
+                    day_utterance = _returnValue(left_numerals,0,2)
+                    is_day = validateday(day_utterance)
                     if not is_day:
-                        day_dob = _returnValue(left_numerals,0,1)
+                        day_utterance = _returnValue(left_numerals,0,1)
                 else:
-                    day_dob = _returnValue(left_numerals,0,1)
+                    day_utterance = _returnValue(left_numerals,0,1)
                 
                 
             except:
@@ -849,72 +851,72 @@ def converttovalidDOB(utterance):
         elif is_day and not is_month and not is_year:
             
             try:
-                #left_numerals = re.sub(year_dob,'',date_of_birth)
-                left_numerals = re.sub(day_dob,'',date_of_birth)
-                logger.info('DOB remaining is :{}'.format(left_numerals))
+                #left_numerals = re.sub(year_utterance,'',date_utterance)
+                left_numerals = re.sub(day_utterance,'',date_utterance)
+                logger.info('utterance remaining is :{}'.format(left_numerals))
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 if len(left_numerals)>1:
-                    month_dob = _returnValue(left_numerals,0,2)
-                    is_month = validateday(month_dob)
+                    month_utterance = _returnValue(left_numerals,0,2)
+                    is_month = validateday(month_utterance)
                     if not is_month:
-                        month_dob = _returnValue(left_numerals,0,1)
-                        year_dob = _returnValue(left_numerals,1,len(left_numerals))
+                        month_utterance = _returnValue(left_numerals,0,1)
+                        year_utterance = _returnValue(left_numerals,1,len(left_numerals))
                     else:
-                        year_dob = _returnValue(left_numerals,2,len(left_numerals))
+                        year_utterance = _returnValue(left_numerals,2,len(left_numerals))
                 
             except:
                 logger.info("No Month found")
         elif is_day and not is_month and is_year:
             
             try:
-                left_numerals = re.sub(year_dob,'',date_of_birth)
-                left_numerals = re.sub(day_dob,'',left_numerals)
-                logger.info('DOB remaining is :{}'.format(left_numerals))
+                left_numerals = re.sub(year_utterance,'',date_utterance)
+                left_numerals = re.sub(day_utterance,'',left_numerals)
+                logger.info('utterance remaining is :{}'.format(left_numerals))
                 left_numerals = re.findall('[0-9]{1}',left_numerals)
                 if len(left_numerals)>1:
-                    month_dob = _returnValue(left_numerals,0,2)
-                    is_month = validateday(month_dob)
+                    month_utterance = _returnValue(left_numerals,0,2)
+                    is_month = validateday(month_utterance)
                     if not is_month:
-                        month_dob = _returnValue(left_numerals,0,1)
+                        month_utterance = _returnValue(left_numerals,0,1)
                 
             except:
                 logger.info("No Month found")
         elif not is_year and is_day and is_month:
-            logger.info("when only year is not available and both day an month are available:{}".format(date_of_birth))
-            logger.info("Day {}:Month {}".format(day_dob,month_dob))
+            logger.info("when only year is not available and both day an month are available:{}".format(date_utterance))
+            logger.info("Day {}:Month {}".format(day_utterance,month_utterance))
             try:
-                # left_numerals = re.sub(day_dob,'',dobstr[0])
+                # left_numerals = re.sub(day_utterance,'',utterancestr[0])
                 # logger.info("Left Numerals:{}".format(left_numerals))
-                # left_numerals = re.sub(month_dob,'',left_numerals)
+                # left_numerals = re.sub(month_utterance,'',left_numerals)
                 # logger.info("Left Numerals:{}".format(left_numerals))
-                left_numerals = re.findall('[0-9]{2}',date_of_birth)
+                left_numerals = re.findall('[0-9]{2}',date_utterance)
                 logger.info("Left Numerals:{}".format(left_numerals))
                 if left_numerals!=[]:
-                    year_dob = left_numerals[0]
-                    #is_year = validateyear(month_dob)
+                    year_utterance = left_numerals[0]
+                    #is_year = validateyear(month_utterance)
                 else:
-                    year_dob =-1
+                    year_utterance =-1
                 
             except:
                 logger.info("No Year found")
                            
-        rowdata = [dobstr,year_dob,month_dob,day_dob]
+        rowdata = [utterancestr,year_utterance,month_utterance,day_utterance]
         row_list.append(rowdata)            
         
     # logger.info("Total Records = {}".format(len(index)))
     # logger.info("Total Months in text  = {}".format(count_month))
     # logger.info("Total Valid Date Records = {}".format(valid_daterecords))
-    dob,is_year_valid,is_month_valid,is_day_valid = _getvaliddate(year_dob,month_dob,day_dob)
-    #logger.info("Just before returning: {}".format(dob))
-    #dob_1 = str(datetime.datetime(int(year_dob),int(month_dob),int(day_dob)).date())
-    logger.info("Just before returning: {}".format(dob))
+    utterance,is_year_valid,is_month_valid,is_day_valid = _getvaliddate(year_utterance,month_utterance,day_utterance)
+    #logger.info("Just before returning: {}".format(utterance))
+    #utterance_1 = str(datetime.datetime(int(year_utterance),int(month_utterance),int(day_utterance)).date())
+    logger.info("Just before returning: {}".format(utterance))
 
     
-    return dob,is_year_valid,is_month_valid,is_day_valid
+    return utterance,is_year_valid,is_month_valid,is_day_valid
 
 def get_date(utterance:str):
-    date_of_birth,is_year_available,is_month_available,is_day_available = converttovalidDOB(utterance)
-    return {"date":date_of_birth}
+    date_utterance,is_year_available,is_month_available,is_day_available = converttovalidutterance(utterance)
+    return {"date":date_utterance}
 
 
 if __name__ == "__main__":
@@ -928,8 +930,8 @@ if __name__ == "__main__":
         utterance=input("Enter any utterance: ")
         #newutterance = number2word(utterance)
         #logger.info("New utterance is :{}".format(newutterance))
-        date_of_birth,is_year_available,is_month_available,is_day_available = converttovalidDOB(utterance)
-        logger.info("DOB is {}".format(date_of_birth))
+        date_utterance,is_year_available,is_month_available,is_day_available = converttovalidutterance(utterance)
+        logger.info("utterance is {}".format(date_utterance))
         logger.info("is_year is {}".format(is_year_available))
         logger.info("is_month is {}".format(is_month_available))
         logger.info("is_day is {}".format(is_day_available))
