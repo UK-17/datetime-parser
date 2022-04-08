@@ -14,6 +14,6 @@ logger = logging.getLogger(__name__)
 router=APIRouter()
 
 @router.post('/get-datetime-range')
-async def get_medicine_info(data:schemas.DateUtterance):
+async def get_datetime_range(data:schemas.DateUtterance):
     result = datetime_range.translate_range(data.utterance)
     return result
